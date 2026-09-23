@@ -150,8 +150,11 @@ def analyze_exam_images_with_gemini(api_key, meta_data, questions_images):
     else:
          translation_instruction += "השאר את כל הטקסטים בשפה העברית התקנית."
 
+    # כאן בוצע התיקון: מסננים את הלוגו מתוך המידע שנשלח ל-Gemini
+    clean_meta = {k: v for k, v in meta_data.items() if k != 'logo_bytes'}
+
     contents = [SYSTEM_PROMPT + translation_instruction]
-    contents.append(f"פרטי המבחן: {json.dumps(meta_data, ensure_ascii=False)}")
+    contents.append(f"פרטי המבחן: {json.dumps(clean_meta, ensure_ascii=False)}")
     contents.append("להלן תמונות השאלות לפי הסדר. החזר JSON תקני בלבד התואם ל-Schema:\n" + JSON_SCHEMA)
     
     for q_idx, images in enumerate(questions_images):
@@ -420,11 +423,9 @@ elif st.session_state.step == 2:
                     key=f"pastebtn_{i}"
                 )
                 
-                # שמירת התמונה שהודבקה ב-Session State כדי שלא תיעלם
                 if paste_res.image_data is not None:
                     st.session_state.pasted_images[f"q_{i}"] = paste_res.image_data
                 
-                # הצגת התמונה המודבקת למורה
                 if f"q_{i}" in st.session_state.pasted_images:
                     st.success("✅ התמונה הודבקה בהצלחה!")
                     st.image(st.session_state.pasted_images[f"q_{i}"], width=350)
@@ -438,7 +439,6 @@ elif st.session_state.step == 2:
             with tab3:
                 cam_file = st.camera_input(f"מצלמה עבור שאלה {i+1}", key=f"cam_{i}", label_visibility="collapsed")
             
-            # איסוף התמונות מכל המקורות לשאלה הספציפית הזו
             question_files = []
             if files:
                 question_files.extend(files)
@@ -487,7 +487,6 @@ elif st.session_state.step == 3:
                 for q in st.session_state.questions_data:
                     q_imgs = []
                     for f in q["files"]:
-                        # בדיקה האם התמונה הגיעה מהדבקה (Image) או מהעלאה/מצלמה (File)
                         if isinstance(f, Image.Image):
                             q_imgs.append(f)
                         else:
@@ -548,5 +547,5 @@ elif st.session_state.step == 5:
 
     if st.button("צור מבחן חדש 🔄"):
         st.session_state.step = 1
-        st.session_state.pasted_images = {} # איפוס התמונות לקראת מבחן חדש
+        st.session_state.pasted_images = {}
         st.rerun()
