@@ -136,7 +136,6 @@ JSON_SCHEMA = """
 def analyze_exam_images_with_gemini(api_key, meta_data, questions_images):
     client = genai.Client(api_key=api_key)
     
-    # הוספת הנחיית התרגום במקרה שהמורה בחר שפה אחרת
     language = meta_data.get('language', 'עברית')
     translation_instruction = f"\n\n*** הנחיה קריטית - שפת המבחן: {language} ***\n"
     if language != "עברית":
@@ -174,7 +173,6 @@ def set_cell_rtl(cell):
 def create_word_document(exam_data, meta_data, doc_type="exam", logo_file=None):
     doc = docx.Document()
     
-    # בדיקה האם השפה היא מימין לשמאל (RTL) או משמאל לימין (LTR)
     language = meta_data.get("language", "עברית")
     is_rtl = language in ["עברית", "ערבית"] 
     align_mode = WD_ALIGN_PARAGRAPH.RIGHT if is_rtl else WD_ALIGN_PARAGRAPH.LEFT
@@ -241,7 +239,7 @@ def create_word_document(exam_data, meta_data, doc_type="exam", logo_file=None):
         
         for inst in meta_data.get("instructions", "").split("\n"):
             if inst.strip():
-                p_i = doc.add_paragraph(inst.strip(), style='List Bullet')
+                p_i = doc.add_paragraph(inst.strip())
                 p_i.alignment = align_mode
 
     for q in exam_data.get("questions", []):
@@ -328,7 +326,6 @@ for idx, s in enumerate(steps, 1):
     else:
         st.sidebar.markdown(f"⚪ {s}")
 
-# --- קרדיט למפתח ---
 st.sidebar.markdown("""
 <div class="credit-box">
     <b>פותח ע"י שלמה גבר</b><br>
@@ -351,15 +348,25 @@ if st.session_state.step == 1:
     with col2:
         teacher_name = st.text_input("שם המורה / רכז המקצוע", value=st.session_state.exam_meta.get("teacher_name", ""))
         duration = st.number_input("משך הבחינה (בדקות)", min_value=45, max_value=240, value=90, step=15)
-        num_questions = st.number_input("מספר שאלות בבחינה", min_value=1, max_value=10, value=3)
-        # הוספת שפת הבחינה
+        num_questions = st.number_input("מספר שאלות בטופס הבחינה", min_value=1, max_value=10, value=4)
+        questions_to_answer = st.number_input("על כמה שאלות התלמיד נדרש לענות?", min_value=1, max_value=num_questions, value=num_questions)
         language = st.selectbox("🌍 שפת המבחן (מומלץ לתלמידים עולים חדשים)", 
                                 ["עברית", "רוסית", "אנגלית", "צרפתית", "ספרדית", "אמהרית", "אוקראינית"], index=0)
 
-    instructions = st.text_area("הוראות כלליות לתלמיד", value="""1. יש להקפיד על סדר וניקיון בפתרון.
-2. כל שלב חישובי או גאומטרי חייב להיות מנומק.
-3. טעות חישוב לא תגרור פסילת כל הסעיף אם הדרך הייתה נכונה.
-4. שימוש במחשבון מותר בהתאם לתקנון.""", height=120)
+    # יצירת טקסט ההנחיות הדינמי המבוסס על בחירת המורה
+    default_instructions = f"""הוראות לנבחן
+
+• משך הבחינה: {duration} דקות.
+• מבנה המבחן: יש לענות על כל {questions_to_answer} השאלות במלואן.
+• חומר עזר מותר בשימוש: מחשבון + דף נוסחאות מצורף.
+• הצגת הדרך: חובה להציג את כל שלבי החישוב ודרך הפתרון באופן מפורט. תשובה סופית ללא נימוק או דרך פתרון מפורטת לא תזכה במלוא הניקוד.
+
+אופן הכתיבה וההגשה:
+◦ הקפידו לכתוב בצורה ברורה, קריאה ומסודרת.
+◦ חובה להעתיק שרטוטים רלוונטיים לדף הפתרון.
+◦ שימו לב: הבדיקה תתבצע אך ורק על גבי דפי התשובות. טיוטות, פתרונות או הערות שייכתבו על טופס השאלון לא ייבדקו."""
+
+    instructions = st.text_area("הוראות כלליות לתלמיד", value=default_instructions, height=270)
 
     logo_file = st.file_uploader("העלאת סמל/לוגו בית הספר (PNG/JPG)", type=["png", "jpg", "jpeg"])
 
@@ -372,6 +379,7 @@ if st.session_state.step == 1:
             "teacher_name": teacher_name,
             "duration": duration,
             "num_questions": num_questions,
+            "questions_to_answer": questions_to_answer,
             "language": language,
             "instructions": instructions,
             "logo_bytes": logo_file.getvalue() if logo_file else None
@@ -388,10 +396,12 @@ elif st.session_state.step == 2:
     num_q = st.session_state.exam_meta.get("num_questions", 3)
     uploaded_by_q = []
     
+    st.info(f"📌 הגדרת שבמבחן יהיו **{num_q} שאלות**. המערכת ממתינה לקבל לפחות תמונה אחת לכל שאלה בהתאמה.")
+    
     for i in range(num_q):
-        with st.expander(f"📌 אזור העלאה עבור שאלה מס' {i+1}", expanded=(i==0)):
+        with st.expander(f"אזור העלאה עבור שאלה מס' {i+1}", expanded=(i==0)):
             pts = st.number_input(f"ניקוד עבור שאלה {i+1}", min_value=5, max_value=100, value=100//num_q, key=f"pts_{i}")
-            files = st.file_uploader(f"גרור תמונות לשאלה {i+1}", type=["png", "jpg", "jpeg"], accept_multiple_files=True, key=f"upload_{i}")
+            files = st.file_uploader(f"גרור תמונה/ות לשאלה {i+1}", type=["png", "jpg", "jpeg"], accept_multiple_files=True, key=f"upload_{i}")
             uploaded_by_q.append({"question_number": i+1, "points": pts, "files": files})
             
     c1, c2 = st.columns(2)
@@ -401,9 +411,17 @@ elif st.session_state.step == 2:
             st.rerun()
     with c2:
         if st.button("סיום העלאה וסריקה אוטומטית ⬅️"):
-            st.session_state.questions_data = uploaded_by_q
-            st.session_state.step = 3
-            st.rerun()
+            missing_images = []
+            for q in uploaded_by_q:
+                if not q["files"] or len(q["files"]) == 0:
+                    missing_images.append(str(q["question_number"]))
+            
+            if missing_images:
+                st.error(f"⚠️ שגיאה: לא הועלו תמונות עבור שאלות מספר: {', '.join(missing_images)}. אנא העלה תמונה לכל שאלה לפני המעבר לשלב הבא.")
+            else:
+                st.session_state.questions_data = uploaded_by_q
+                st.session_state.step = 3
+                st.rerun()
 
 # -------------------------------------------------------------
 # שלב 3: הפעלה מול Gemini API
@@ -411,7 +429,6 @@ elif st.session_state.step == 2:
 elif st.session_state.step == 3:
     st.title("שלב 3: פיענוח מתמטי וסנכרון")
     
-    # הודעה מותאמת אם נבחרה שפה זרה
     lang = st.session_state.exam_meta.get("language", "עברית")
     if lang != "עברית":
         st.info(f"🌍 שים לב: המערכת תתרגם אוטומטית את כל השאלות וההוראות לשפה ה{lang}.")
