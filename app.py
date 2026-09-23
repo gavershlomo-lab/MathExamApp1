@@ -49,6 +49,11 @@ st.markdown("""
         text-align: center;
         border: 1px solid #bbdefb;
     }
+    /* התאמות לטאבים שייראו טוב מימין לשמאל */
+    [data-testid="stTabs"] button {
+        font-size: 16px;
+        font-weight: bold;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -353,7 +358,6 @@ if st.session_state.step == 1:
         language = st.selectbox("🌍 שפת המבחן (מומלץ לתלמידים עולים חדשים)", 
                                 ["עברית", "רוסית", "אנגלית", "צרפתית", "ספרדית", "אמהרית", "אוקראינית"], index=0)
 
-    # יצירת טקסט ההנחיות הדינמי המבוסס על בחירת המורה
     default_instructions = f"""הוראות לנבחן
 
 • משך הבחינה: {duration} דקות.
@@ -388,7 +392,7 @@ if st.session_state.step == 1:
         st.rerun()
 
 # -------------------------------------------------------------
-# שלב 2: העלאת שאלות
+# שלב 2: העלאת שאלות (מעודכן: מצלמה והדבקה)
 # -------------------------------------------------------------
 elif st.session_state.step == 2:
     st.title("שלב 2: העלאת צילומי השאלות")
@@ -396,13 +400,31 @@ elif st.session_state.step == 2:
     num_q = st.session_state.exam_meta.get("num_questions", 3)
     uploaded_by_q = []
     
-    st.info(f"📌 הגדרת שבמבחן יהיו **{num_q} שאלות**. המערכת ממתינה לקבל לפחות תמונה אחת לכל שאלה בהתאמה.")
+    st.info(f"📌 הגדרת שבמבחן יהיו **{num_q} שאלות**. תוכלו להעלות קובץ, להדביק צילום מסך (Ctrl+V) או לצלם ישירות מהנייד.")
     
     for i in range(num_q):
         with st.expander(f"אזור העלאה עבור שאלה מס' {i+1}", expanded=(i==0)):
             pts = st.number_input(f"ניקוד עבור שאלה {i+1}", min_value=5, max_value=100, value=100//num_q, key=f"pts_{i}")
-            files = st.file_uploader(f"גרור תמונה/ות לשאלה {i+1}", type=["png", "jpg", "jpeg"], accept_multiple_files=True, key=f"upload_{i}")
-            uploaded_by_q.append({"question_number": i+1, "points": pts, "files": files})
+            
+            # חלוקה ללשוניות - קובץ/הדבקה מול מצלמה
+            tab1, tab2 = st.tabs(["📁 העלאת קובץ / הדבקה (Ctrl+V)", "📷 צילום מהסלולר/מצלמת רשת"])
+            
+            with tab1:
+                st.write("גררו לכאן תמונות, לחצו לבחירה מתיקייה, או לחצו על התיבה והקישו **Ctrl+V** להדבקת צילום מסך.")
+                files = st.file_uploader(f"תמונות לשאלה {i+1}", type=["png", "jpg", "jpeg"], accept_multiple_files=True, key=f"upload_{i}", label_visibility="collapsed")
+            
+            with tab2:
+                st.write("לחצו על הכפתור כדי לפתוח את המצלמה ולצלם את השאלה.")
+                cam_file = st.camera_input(f"מצלמה עבור שאלה {i+1}", key=f"cam_{i}", label_visibility="collapsed")
+            
+            # איסוף כל התמונות שהועלו בדרך כלשהי לאותה השאלה
+            question_files = []
+            if files:
+                question_files.extend(files)
+            if cam_file:
+                question_files.append(cam_file)
+                
+            uploaded_by_q.append({"question_number": i+1, "points": pts, "files": question_files})
             
     c1, c2 = st.columns(2)
     with c1:
@@ -417,7 +439,7 @@ elif st.session_state.step == 2:
                     missing_images.append(str(q["question_number"]))
             
             if missing_images:
-                st.error(f"⚠️ שגיאה: לא הועלו תמונות עבור שאלות מספר: {', '.join(missing_images)}. אנא העלה תמונה לכל שאלה לפני המעבר לשלב הבא.")
+                st.error(f"⚠️ שגיאה: לא הועלו תמונות עבור שאלות מספר: {', '.join(missing_images)}. אנא העלה או צלם תמונה לכל שאלה.")
             else:
                 st.session_state.questions_data = uploaded_by_q
                 st.session_state.step = 3
@@ -500,3 +522,7 @@ elif st.session_state.step == 5:
     if st.button("צור מבחן חדש 🔄"):
         st.session_state.step = 1
         st.rerun()
+```eof
+
+עליך לבצע את אותו התהליך כמו קודם: לעדכן את הקובץ `app.py` במאגר ה-GitHub שלך עם הקוד החדש וללחוץ על השמירה (Commit).
+לאחר שהאפליקציה תתעדכן, תיכנס אליה מהטלפון הסלולרי שלך (דרך הקישור המפורסם) - תוכל לראות איך הלשונית של המצלמה מפעילה ישירות את המצלמה של הסמארטפון בקליק אחד!
