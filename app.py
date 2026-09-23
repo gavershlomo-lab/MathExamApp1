@@ -150,7 +150,6 @@ def analyze_exam_images_with_gemini(api_key, meta_data, questions_images):
     else:
          translation_instruction += "השאר את כל הטקסטים בשפה העברית התקנית."
 
-    # כאן בוצע התיקון: מסננים את הלוגו מתוך המידע שנשלח ל-Gemini
     clean_meta = {k: v for k, v in meta_data.items() if k != 'logo_bytes'}
 
     contents = [SYSTEM_PROMPT + translation_instruction]
@@ -163,7 +162,7 @@ def analyze_exam_images_with_gemini(api_key, meta_data, questions_images):
             contents.append(img)
             
     response = client.models.generate_content(
-        model='gemini-2.5-pro',
+        model='gemini-3.1-pro-preview', # המודל המעודכן והמהיר
         contents=contents,
         config=types.GenerateContentConfig(
             response_mime_type="application/json",
@@ -413,7 +412,6 @@ elif st.session_state.step == 2:
             
             tab1, tab2, tab3 = st.tabs(["📋 הדבקה (Ctrl+V)", "📁 העלאת קובץ", "📷 צילום מהסלולר"])
             
-            # --- אזור ההדבקה החכם ---
             with tab1:
                 st.write("לחצו על הכפתור למטה כדי להדביק את השאלה שגזרתם הרגע:")
                 paste_res = paste_image_button(
@@ -469,7 +467,7 @@ elif st.session_state.step == 2:
                 st.rerun()
 
 # -------------------------------------------------------------
-# שלב 3: הפעלה מול Gemini API
+# שלב 3: הפעלה מול Gemini API (אוטומטי לחלוטין אם המפתח בענן)
 # -------------------------------------------------------------
 elif st.session_state.step == 3:
     st.title("שלב 3: פיענוח מתמטי וסנכרון")
@@ -478,9 +476,18 @@ elif st.session_state.step == 3:
     if lang != "עברית":
         st.info(f"🌍 שים לב: המערכת תתרגם אוטומטית את כל השאלות וההוראות לשפה ה{lang}.")
 
-    api_key = st.text_input("הזן מפתח Gemini API של המורה (לצורך העיבוד):", type="password")
+    # ניסיון לשלוף את המפתח הסודי שלך מהענן, מבלי לשאול את המשתמש
+    try:
+        api_key = st.secrets["GEMINI_API_KEY"]
+        is_auto_key = True
+    except:
+        api_key = st.text_input("הזן מפתח Gemini API של המורה (לצורך העיבוד):", type="password")
+        is_auto_key = False
     
     if api_key:
+        if is_auto_key:
+            st.success("✅ מפתח המערכת אותר בהצלחה! העיבוד החל אוטומטית...")
+            
         with st.spinner(f"מנתח שאלות ומתרגם ל{lang}..."):
             try:
                 all_images_grouped = []
@@ -501,7 +508,7 @@ elif st.session_state.step == 3:
             except Exception as e:
                 st.error(f"שגיאה: {str(e)}")
     else:
-        st.info("אנא הזן מפתח API כדי להמשיך.")
+        st.info("המפתח אינו מוגדר בענן. אנא הזן מפתח API כדי להמשיך.")
 
 # -------------------------------------------------------------
 # שלב 4: עריכה ותצוגה מקדימה
