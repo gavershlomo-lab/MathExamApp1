@@ -10,6 +10,7 @@ from docx.shared import Inches, Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml import OxmlElement, parse_xml
 from docx.oxml.ns import nsdecls, qn
+from streamlit_paste_button import paste_image_button
 
 # ==========================================
 # 1. הגדרות דף וסגנון RTL לממשק המורה
@@ -49,7 +50,6 @@ st.markdown("""
         text-align: center;
         border: 1px solid #bbdefb;
     }
-    /* התאמות לטאבים שייראו טוב מימין לשמאל */
     [data-testid="stTabs"] button {
         font-size: 16px;
         font-weight: bold;
@@ -65,6 +65,8 @@ if "questions_data" not in st.session_state:
     st.session_state.questions_data = []
 if "processed_exam" not in st.session_state:
     st.session_state.processed_exam = None
+if "pasted_images" not in st.session_state:
+    st.session_state.pasted_images = {}
 
 # ==========================================
 # 2. הנדסת פרומפט מערכתי מומחה (Gemini Engine)
@@ -392,7 +394,7 @@ if st.session_state.step == 1:
         st.rerun()
 
 # -------------------------------------------------------------
-# שלב 2: העלאת שאלות (מצלמה והדבקה)
+# שלב 2: העלאת שאלות 
 # -------------------------------------------------------------
 elif st.session_state.step == 2:
     st.title("שלב 2: העלאת צילומי השאלות")
@@ -400,27 +402,50 @@ elif st.session_state.step == 2:
     num_q = st.session_state.exam_meta.get("num_questions", 3)
     uploaded_by_q = []
     
-    st.info(f"📌 הגדרת שבמבחן יהיו **{num_q} שאלות**. תוכלו להעלות קובץ, להדביק צילום מסך (Ctrl+V) או לצלם ישירות מהנייד.")
+    st.info(f"📌 במבחן יהיו **{num_q} שאלות**. גזרו תמונה (Ctrl+C), עברו ללשונית 'הדבקה' ולחצו על הכפתור כדי להדביק.")
     
     for i in range(num_q):
         with st.expander(f"אזור העלאה עבור שאלה מס' {i+1}", expanded=(i==0)):
             pts = st.number_input(f"ניקוד עבור שאלה {i+1}", min_value=5, max_value=100, value=100//num_q, key=f"pts_{i}")
             
-            tab1, tab2 = st.tabs(["📁 העלאת קובץ / הדבקה (Ctrl+V)", "📷 צילום מהסלולר/מצלמת רשת"])
+            tab1, tab2, tab3 = st.tabs(["📋 הדבקה (Ctrl+V)", "📁 העלאת קובץ", "📷 צילום מהסלולר"])
             
+            # --- אזור ההדבקה החכם ---
             with tab1:
-                st.write("גררו לכאן תמונות, לחצו לבחירה מתיקייה, או לחצו על התיבה והקישו **Ctrl+V** להדבקת צילום מסך.")
+                st.write("לחצו על הכפתור למטה כדי להדביק את השאלה שגזרתם הרגע:")
+                paste_res = paste_image_button(
+                    label="📋 לחץ כאן להדבקת התמונה (Ctrl+V)",
+                    background_color="#1E88E5",
+                    hover_background_color="#1565C0",
+                    key=f"pastebtn_{i}"
+                )
+                
+                # שמירת התמונה שהודבקה ב-Session State כדי שלא תיעלם
+                if paste_res.image_data is not None:
+                    st.session_state.pasted_images[f"q_{i}"] = paste_res.image_data
+                
+                # הצגת התמונה המודבקת למורה
+                if f"q_{i}" in st.session_state.pasted_images:
+                    st.success("✅ התמונה הודבקה בהצלחה!")
+                    st.image(st.session_state.pasted_images[f"q_{i}"], width=350)
+                    if st.button("🗑️ מחק תמונה מודבקת", key=f"del_paste_{i}"):
+                        del st.session_state.pasted_images[f"q_{i}"]
+                        st.rerun()
+
+            with tab2:
                 files = st.file_uploader(f"תמונות לשאלה {i+1}", type=["png", "jpg", "jpeg"], accept_multiple_files=True, key=f"upload_{i}", label_visibility="collapsed")
             
-            with tab2:
-                st.write("לחצו על הכפתור כדי לפתוח את המצלמה ולצלם את השאלה.")
+            with tab3:
                 cam_file = st.camera_input(f"מצלמה עבור שאלה {i+1}", key=f"cam_{i}", label_visibility="collapsed")
             
+            # איסוף התמונות מכל המקורות לשאלה הספציפית הזו
             question_files = []
             if files:
                 question_files.extend(files)
             if cam_file:
                 question_files.append(cam_file)
+            if f"q_{i}" in st.session_state.pasted_images:
+                question_files.append(st.session_state.pasted_images[f"q_{i}"])
                 
             uploaded_by_q.append({"question_number": i+1, "points": pts, "files": question_files})
             
@@ -462,7 +487,11 @@ elif st.session_state.step == 3:
                 for q in st.session_state.questions_data:
                     q_imgs = []
                     for f in q["files"]:
-                        q_imgs.append(Image.open(f))
+                        # בדיקה האם התמונה הגיעה מהדבקה (Image) או מהעלאה/מצלמה (File)
+                        if isinstance(f, Image.Image):
+                            q_imgs.append(f)
+                        else:
+                            q_imgs.append(Image.open(f))
                     all_images_grouped.append(q_imgs)
                 
                 result = analyze_exam_images_with_gemini(api_key, st.session_state.exam_meta, all_images_grouped)
@@ -519,4 +548,5 @@ elif st.session_state.step == 5:
 
     if st.button("צור מבחן חדש 🔄"):
         st.session_state.step = 1
+        st.session_state.pasted_images = {} # איפוס התמונות לקראת מבחן חדש
         st.rerun()
