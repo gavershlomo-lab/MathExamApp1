@@ -162,7 +162,7 @@ def analyze_exam_images_with_gemini(api_key, meta_data, questions_images):
             contents.append(img)
             
     response = client.models.generate_content(
-        model='gemini-3.1-pro-preview', # המודל המעודכן והמהיר
+        model='gemini-1.5-pro', # <--- כאן בוצע השינוי למודל החינמי והיציב
         contents=contents,
         config=types.GenerateContentConfig(
             response_mime_type="application/json",
